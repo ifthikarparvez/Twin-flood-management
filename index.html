@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Twin for Flood Management, Simulation & Early Warning</title>
+    <!-- Tailwind CSS -->
+    <script src="assets/vendor/tailwindcss.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' },
+                        dark: { 800: '#0f172a', 900: '#090d16', 950: '#030712' }
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'radar-sweep': 'radar 4s linear infinite'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Alpine.js -->
+    <script defer src="assets/vendor/alpine.min.js"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
+    <script src="assets/vendor/leaflet/leaflet.js"></script>
+    <!-- Chart.js -->
+    <script src="assets/vendor/chart.umd.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="assets/vendor/lucide.min.js"></script>
+
+    <style>
+        body { 
+            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+            background-color: #030712;
+            color: #f1f5f9;
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Badge Classes */
+        .data-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .badge-sim {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .badge-obs {
+            background-color: rgba(99, 102, 241, 0.1);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+        }
+
+        /* Marker CSS Reset for Leaflet DivIcons */
+        .custom-leaflet-marker, .custom-shelter-marker {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        /* Leaflet Dark Controls Overrides */
+        .leaflet-container {
+            background-color: #090d16 !important;
+            font-family: inherit;
+        }
+        .leaflet-bar {
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+            border-radius: 8px !important;
+            overflow: hidden;
+        }
+        .leaflet-bar a {
+            background-color: #0f172a !important;
+            color: #94a3b8 !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        .leaflet-bar a:hover {
+            background-color: #1e293b !important;
+            color: #38bdf8 !important;
+        }
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6) !important;
+            border-radius: 10px !important;
+        }
+        .leaflet-popup-content {
+            margin: 12px 14px !important;
+            font-size: 12px !important;
+        }
+        .leaflet-control-attribution {
+            background: rgba(15, 23, 42, 0.8) !important;
+            color: #64748b !important;
+            font-size: 9px !important;
+            backdrop-filter: blur(4px);
+            border-radius: 4px;
+            margin: 0 4px 4px 0 !important;
+            padding: 2px 6px !important;
+        }
+        .leaflet-control-attribution a {
+            color: #94a3b8 !important;
+        }
+
+        /* Marker Pulse Animations */
+        .marker-pulse-danger {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            animation: pulse-red 1.6s infinite;
+        }
+        .marker-pulse-warning {
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+            animation: pulse-amber 2s infinite;
+        }
+        .marker-pulse-normal {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+            animation: pulse-emerald 2.5s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
+            70% { transform: scale(1); box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        @keyframes pulse-amber {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.8); }
+            70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        @keyframes pulse-emerald {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased bg-slate-950 text-slate-100 selection:bg-blue-600 selection:text-white" x-data="floodApp()">
+
+    <!-- TOP SYSTEM HEADER -->
+    <header class="bg-slate-900/90 backdrop-blur-md text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3.5">
+                <div class="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl text-white shadow-lg shadow-blue-500/20 border border-blue-400/20">
+                    <i data-lucide="waves" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="font-bold text-base sm:text-lg tracking-tight text-slate-50">
+                            Digital Twin Flood Management
+                        </h1>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-widest">
+                            Live Twin MVP
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 flex items-center space-x-2 mt-0.5">
+                        <span>IoT Telemetry</span>
+                        <span class="w-1 h-1 rounded-full bg-slate-600"></span>
+                        <span>DEM Topography</span>
+                        <span class="w-1 h-1 rounded-full bg-slate-600"></span>
+                        <span>Hydrological Modeling Engine</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Telemetry Status Pills -->
+            <div class="flex items-center space-x-3">
+                <div class="flex items-center space-x-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
+                    <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+                    <span class="text-slate-400">Data Source:</span>
+                    <span class="font-mono font-semibold text-blue-400">SIMULATED DEM TWIN</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+
+        <!-- ALARM CONTROL BANNER & SYSTEM CONTROLS -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 rounded-xl border transition-all"
+                     :class="alarmActive ? 'bg-red-500/20 border-red-500/40 text-red-400 animate-pulse' : 'bg-slate-800 border-slate-700 text-slate-400'">
+                    <i data-lucide="bell-ring" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h3 class="font-bold text-slate-100 text-sm">Emergency Audio Siren System</h3>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold"
+                              :class="alarmActive ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse' : 'bg-slate-800 text-slate-400 border border-slate-700'"
+                              x-text="alarmActive ? 'ALARM ACTIVE' : 'READY'"></span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-0.5">Synthesized Web Audio alarm. Triggers automatically on DANGER threshold (≥ 6.0m) or via manual testing/presets.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button @click="toggleAlarm()" 
+                        class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border shadow-lg cursor-pointer"
+                        :class="alarmActive 
+                            ? 'bg-red-600 hover:bg-red-500 text-white border-red-400/30 animate-pulse' 
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'">
+                    <span x-show="!alarmActive" class="inline-flex"><i data-lucide="volume-2" class="w-4 h-4"></i></span>
+                    <span x-show="alarmActive" class="inline-flex"><i data-lucide="volume-x" class="w-4 h-4"></i></span>
+                    <span x-text="alarmActive ? 'Silence Alarm Siren' : 'Test Alarm Sound'"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SECTION 1: GIS MONITORING MAP -->
+        <section id="map-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <i data-lucide="map" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-bold text-slate-100 text-base">GIS Command Monitoring Map</h2>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+                                Dynamic Engine
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Real-time ground IoT gauges, terrain flood risk contours, shelter capacity, and inundation modeling.</p>
+                    </div>
+                </div>
+
+                <!-- Map Layer Checkboxes & Legend -->
+                <div class="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-300">
+                    <label class="flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition select-none">
+                        <input type="checkbox" x-model="layers.stations" @change="toggleLayers" class="rounded bg-slate-900 border-slate-700 text-blue-500 focus:ring-blue-500/30">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                            IoT Gauges
+                        </span>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition select-none">
+                        <input type="checkbox" x-model="layers.inundation" @change="toggleLayers" class="rounded bg-slate-900 border-slate-700 text-blue-500 focus:ring-blue-500/30">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span>
+                            Simulated Inundation
+                        </span>
+                    </label>
+                    <label class="flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition select-none">
+                        <input type="checkbox" x-model="layers.shelters" @change="toggleLayers" class="rounded bg-slate-900 border-slate-700 text-blue-500 focus:ring-blue-500/30">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block"></span>
+                            Evacuation Shelters
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Map View Area -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <!-- Leaflet Container -->
+                <div class="lg:col-span-8 rounded-xl overflow-hidden border border-slate-800 h-[480px] relative shadow-inner group">
+                    <div id="leafletMap" class="w-full h-full z-10"></div>
+
+                    <!-- Floating Map Controls Overlay -->
+                    <div class="absolute top-3 right-3 z-20 flex flex-col gap-2">
+                        <!-- Basemap Switcher -->
+                        <div class="bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/80 shadow-2xl flex items-center gap-1 text-[11px] font-semibold text-slate-300">
+                            <button @click="switchBasemap('street')" 
+                                    :class="activeBasemap === 'street' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'"
+                                    class="px-2.5 py-1 rounded-lg transition cursor-pointer">Street</button>
+                            <button @click="switchBasemap('dark')" 
+                                    :class="activeBasemap === 'dark' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'"
+                                    class="px-2.5 py-1 rounded-lg transition cursor-pointer">Dark</button>
+                        </div>
+
+                        <!-- Recenter Button -->
+                        <button @click="recenterMap()" title="Recenter View" class="p-2 bg-slate-900/90 backdrop-blur-md hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl border border-slate-700/80 shadow-2xl transition flex items-center justify-center self-end cursor-pointer">
+                            <i data-lucide="crosshair" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- Floating Map HUD Stats -->
+                    <div class="absolute bottom-3 left-3 z-20 bg-slate-950/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 text-xs flex items-center gap-4 text-slate-300 shadow-xl pointer-events-none">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="compass" class="w-4 h-4 text-blue-400"></i>
+                            <span class="font-mono text-[11px] text-slate-400">26.145° N, 91.736° E</span>
+                        </div>
+                        <div class="h-3 w-px bg-slate-800"></div>
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="layers" class="w-4 h-4 text-emerald-400"></i>
+                            <span class="text-[11px] text-slate-400">Active Layers: <strong class="text-slate-200" x-text="activeLayersCount">3</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Station Inspector Panel -->
+                <div class="lg:col-span-4 bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between text-xs space-y-4 shadow-xl">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <div>
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Sensor Node</span>
+                                <h3 class="font-bold text-slate-100 text-base mt-0.5" x-text="activeStation.name"></h3>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide"
+                                  :class="{
+                                      'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30': activeStation.status === 'NORMAL',
+                                      'bg-amber-500/10 text-amber-400 border border-amber-500/30': activeStation.status === 'WARNING',
+                                      'bg-red-500/10 text-red-400 border border-red-500/30 animate-pulse': activeStation.status === 'DANGER'
+                                  }"
+                                  x-text="activeStation.status"></span>
+                        </div>
+
+                        <div class="mt-4 space-y-3">
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-800/60">
+                                <span class="text-slate-400">Sensor Hardware ID:</span>
+                                <span class="font-mono font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20" x-text="activeStation.id"></span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-800/60">
+                                <span class="text-slate-400">Water Stage Level:</span>
+                                <span class="font-mono font-bold text-slate-100 text-base" x-text="activeStation.stage + ' meters'"></span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-800/60">
+                                <span class="text-slate-400">Warning Threshold:</span>
+                                <span class="font-mono font-semibold text-amber-400">4.50 meters</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-800/60">
+                                <span class="text-slate-400">Danger Threshold:</span>
+                                <span class="font-mono font-semibold text-red-400">6.00 meters</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5">
+                                <span class="text-slate-400">Telemetry Channel:</span>
+                                <span class="text-emerald-400 font-semibold flex items-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> LoRaWAN / Solar IoT
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <button x-show="activeStation.status === 'DANGER'" 
+                                @click="manuallySetRisk('DANGER')" 
+                                class="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition text-[11px] flex items-center justify-center gap-1.5 animate-pulse shadow-lg shadow-red-500/20 cursor-pointer">
+                            <i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>
+                            <span>Simulate Basin At Danger Stage</span>
+                        </button>
+
+                        <div class="p-3.5 bg-slate-900/90 border border-slate-800 rounded-lg text-slate-300 text-[11px] space-y-1.5 shadow-md">
+                            <p class="font-bold text-blue-400 flex items-center gap-1.5">
+                                <i data-lucide="info" class="w-3.5 h-3.5"></i> Station Diagnostics:
+                            </p>
+                            <p class="text-slate-400 leading-relaxed" x-text="activeStation.desc"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: HYDROLOGICAL SIMULATION CONTROLS -->
+        <section id="sim-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <i data-lucide="sliders" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-bold text-slate-100 text-base">Hydrological Simulation Controls</h2>
+                            <span class="data-badge badge-sim">DEM Hydraulic Twin</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Adjust meteorological sliders or choose risk presets to calculate discharge and trigger alarms in real time.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Controls Form -->
+                <div class="lg:col-span-5 space-y-5 text-xs bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                    <div class="space-y-2">
+                        <!-- Quick Scenario Presets -->
+                        <div class="flex items-center justify-between pb-1 border-b border-slate-800/60">
+                            <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Manual Risk Presets:</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" @click="manuallySetRisk('NORMAL')" 
+                                        :class="sim.risk === 'NORMAL' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 ring-1 ring-emerald-500/30' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'"
+                                        class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold border transition cursor-pointer">Normal</button>
+                                <button type="button" @click="manuallySetRisk('WARNING')" 
+                                        :class="sim.risk === 'WARNING' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 ring-1 ring-amber-500/30' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'"
+                                        class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold border transition cursor-pointer">Warning</button>
+                                <button type="button" @click="manuallySetRisk('DANGER')" 
+                                        :class="sim.risk === 'DANGER' ? 'bg-red-500/30 text-red-300 border-red-500/50 ring-1 ring-red-500/40 animate-pulse' : 'bg-slate-900 text-red-400/80 border-slate-700 hover:text-red-300'"
+                                        class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition flex items-center gap-1 cursor-pointer">
+                                    <span>Danger</span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                </button>
+                                <button type="button" @click="manuallySetRisk('CRITICAL')" 
+                                        :class="sim.risk === 'CRITICAL' ? 'bg-purple-500/30 text-purple-300 border-purple-500/50 ring-1 ring-purple-500/40 animate-pulse' : 'bg-slate-900 text-purple-400/80 border-slate-700 hover:text-purple-300'"
+                                        class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition flex items-center gap-1 cursor-pointer">
+                                    <span>Critical</span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between font-semibold pt-1">
+                            <label class="text-slate-300 flex items-center gap-1.5">
+                                <i data-lucide="cloud-rain" class="w-4 h-4 text-blue-400"></i> Rainfall Intensity:
+                            </label>
+                            <span class="text-blue-400 font-mono font-bold text-sm" x-text="sim.rain + ' mm/h'"></span>
+                        </div>
+                        <input type="range" min="0" max="150" x-model.number="sim.rain" @input="onSliderInput()" class="w-full accent-blue-500 cursor-pointer bg-slate-800 rounded-lg h-2">
+                        <div class="flex justify-between text-[10px] text-slate-500">
+                            <span>0 mm/h (Dry)</span>
+                            <span>75 mm/h (Heavy)</span>
+                            <span>150 mm/h (Extreme)</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between font-semibold">
+                            <label class="text-slate-300 flex items-center gap-1.5">
+                                <i data-lucide="waves" class="w-4 h-4 text-amber-400"></i> Reservoir Gate Discharge:
+                            </label>
+                            <span class="text-amber-400 font-mono font-bold text-sm" x-text="sim.dam + ' m³/s'"></span>
+                        </div>
+                        <input type="range" min="100" max="2500" step="100" x-model.number="sim.dam" @input="onSliderInput()" class="w-full accent-amber-500 cursor-pointer bg-slate-800 rounded-lg h-2">
+                        <div class="flex justify-between text-[10px] text-slate-500">
+                            <span>100 m³/s</span>
+                            <span>1,300 m³/s</span>
+                            <span>2,500 m³/s</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i data-lucide="shield" class="w-4 h-4 text-indigo-400"></i> Modular Temporary Barriers:
+                        </label>
+                        <select x-model.number="sim.barrier" @change="onSliderInput()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="0">No Barriers Deployed (0.0m Protection)</option>
+                            <option value="1">1.0m Temporary Barrier along East Bank</option>
+                            <option value="1.5">1.5m Temporary Barrier along Commercial Zone</option>
+                        </select>
+                    </div>
+
+                    <button @click="resetSimulation()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg border border-slate-700 transition text-xs flex items-center justify-center gap-2 cursor-pointer">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-slate-400"></i> Reset Default Parameters
+                    </button>
+                </div>
+
+                <!-- Live Results Panel -->
+                <div class="lg:col-span-7 bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4 text-xs">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                        <h3 class="font-bold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                            <i data-lucide="activity" class="w-4 h-4 text-blue-400"></i> Simulated Impact Output
+                        </h3>
+                        <span class="font-mono text-[10px] text-slate-500">MODEL: HYDRO-TWIN v2.4</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                        <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 shadow-md">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Simulated Stage</p>
+                            <p class="text-xl font-bold font-mono text-slate-100 mt-1" x-text="sim.stage + ' m'"></p>
+                        </div>
+                        <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 shadow-md">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inundated Area</p>
+                            <p class="text-xl font-bold font-mono text-blue-400 mt-1" x-text="sim.area + ' km²'"></p>
+                        </div>
+                        <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 shadow-md">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pop. at Risk</p>
+                            <p class="text-xl font-bold font-mono text-amber-400 mt-1" x-text="sim.population.toLocaleString()"></p>
+                        </div>
+                        <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 shadow-md">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Risk Level</p>
+                            <span class="inline-block px-2.5 py-1 text-[10px] font-bold rounded-lg mt-1 font-mono tracking-wide"
+                                  :class="{
+                                      'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30': sim.risk === 'NORMAL',
+                                      'bg-amber-500/20 text-amber-400 border border-amber-500/30': sim.risk === 'WARNING',
+                                      'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse': sim.risk === 'DANGER',
+                                      'bg-purple-500/20 text-purple-400 border border-purple-500/30 animate-pulse': sim.risk === 'CRITICAL'
+                                  }" x-text="sim.risk"></span>
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl text-slate-300 leading-relaxed text-[11px] space-y-1">
+                        <p class="font-bold text-blue-400 flex items-center gap-1.5">
+                            <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Hydrological Model Explanation:
+                        </p>
+                        <p class="text-slate-400" x-text="sim.explanation"></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: CHART.JS RAINFALL & WATER LEVEL VISUALIZATION -->
+        <section id="chart-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <i data-lucide="line-chart" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-bold text-slate-100 text-base">Telemetry Graph Visualization</h2>
+                            <span class="data-badge badge-obs">Real-Time Telemetry</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-0.5">Hydrograph displaying live stage fluctuations vs. critical warning thresholds.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4 h-72 relative">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </section>
+
+        <!-- SECTION 4: FLOOD-RISK LEVELS & EXPLANATIONS -->
+        <section id="risk-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+                        <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-bold text-slate-100 text-base">Flood Risk Level Classifications</h2>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider">
+                                Click to Set Stage
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400">Click any card below to manually trigger that risk level, adjust hydraulic parameters, and test automatic sirens.</p>
+                    </div>
+                </div>
+
+                <div class="text-xs font-mono text-slate-400">
+                    Active Level: <span class="font-bold px-2 py-0.5 rounded"
+                                       :class="{
+                                           'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30': sim.risk === 'NORMAL',
+                                           'bg-amber-500/20 text-amber-400 border border-amber-500/30': sim.risk === 'WARNING',
+                                           'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse': sim.risk === 'DANGER',
+                                           'bg-purple-500/20 text-purple-400 border border-purple-500/30 animate-pulse': sim.risk === 'CRITICAL'
+                                       }" x-text="sim.risk"></span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <!-- Normal -->
+                <div @click="manuallySetRisk('NORMAL')" 
+                     class="p-4 rounded-xl border transition-all cursor-pointer space-y-2 select-none hover:scale-[1.02] active:scale-[0.98]"
+                     :class="sim.risk === 'NORMAL' 
+                         ? 'border-emerald-500 bg-emerald-500/15 ring-2 ring-emerald-500/40 shadow-lg shadow-emerald-500/10' 
+                         : 'border-emerald-500/20 bg-emerald-500/5 hover:border-emerald-500/40 opacity-80 hover:opacity-100'">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-emerald-400 text-sm">Normal Stage</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">&lt; 4.5m</span>
+                    </div>
+                    <p class="text-slate-400 leading-relaxed text-[11px]">River safely contained within primary levees. Standard routine telemetry monitoring active.</p>
+                    <div class="pt-1 flex items-center justify-between text-[10px]">
+                        <span class="font-mono text-emerald-400 font-semibold" x-show="sim.risk === 'NORMAL'">✓ ACTIVE STAGE</span>
+                        <span class="text-slate-500" x-show="sim.risk !== 'NORMAL'">Click to set normal</span>
+                    </div>
+                </div>
+
+                <!-- Warning -->
+                <div @click="manuallySetRisk('WARNING')" 
+                     class="p-4 rounded-xl border transition-all cursor-pointer space-y-2 select-none hover:scale-[1.02] active:scale-[0.98]"
+                     :class="sim.risk === 'WARNING' 
+                         ? 'border-amber-500 bg-amber-500/15 ring-2 ring-amber-500/40 shadow-lg shadow-amber-500/10' 
+                         : 'border-amber-500/20 bg-amber-500/5 hover:border-amber-500/40 opacity-80 hover:opacity-100'">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-amber-400 text-sm">Advisory / Warning</span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">4.5m - 6.0m</span>
+                    </div>
+                    <p class="text-slate-400 leading-relaxed text-[11px]">Bankfull capacity reached. Low-lying agricultural overflow and drainage backpressure.</p>
+                    <div class="pt-1 flex items-center justify-between text-[10px]">
+                        <span class="font-mono text-amber-400 font-semibold" x-show="sim.risk === 'WARNING'">✓ ACTIVE STAGE</span>
+                        <span class="text-slate-500" x-show="sim.risk !== 'WARNING'">Click to set warning</span>
+                    </div>
+                </div>
+
+                <!-- Danger -->
+                <div @click="manuallySetRisk('DANGER')" 
+                     class="p-4 rounded-xl border transition-all cursor-pointer space-y-2 select-none hover:scale-[1.02] active:scale-[0.98]"
+                     :class="sim.risk === 'DANGER' 
+                         ? 'border-red-500 bg-red-500/20 ring-2 ring-red-500/50 shadow-lg shadow-red-500/20 animate-pulse' 
+                         : 'border-red-500/20 bg-red-500/5 hover:border-red-500/40 opacity-80 hover:opacity-100'">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-red-400 text-sm flex items-center gap-1.5">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Danger Stage
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-500/20 text-red-300 border border-red-500/30">6.0m - 7.0m</span>
+                    </div>
+                    <p class="text-slate-400 leading-relaxed text-[11px]">Inundation of low residential sectors. Disaster units mobilized. Siren triggers automatically.</p>
+                    <div class="pt-1 flex items-center justify-between text-[10px]">
+                        <span class="font-mono text-red-400 font-bold" x-show="sim.risk === 'DANGER'">🚨 ACTIVE DANGER</span>
+                        <span class="text-red-400/80 font-semibold" x-show="sim.risk !== 'DANGER'">⚡ Click to trigger Danger & Siren</span>
+                    </div>
+                </div>
+
+                <!-- Critical -->
+                <div @click="manuallySetRisk('CRITICAL')" 
+                     class="p-4 rounded-xl border transition-all cursor-pointer space-y-2 select-none hover:scale-[1.02] active:scale-[0.98]"
+                     :class="sim.risk === 'CRITICAL' 
+                         ? 'border-purple-500 bg-purple-500/25 ring-2 ring-purple-500/60 shadow-lg shadow-purple-500/20 animate-pulse' 
+                         : 'border-purple-500/20 bg-purple-500/5 hover:border-purple-500/40 opacity-80 hover:opacity-100'">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-purple-400 text-sm flex items-center gap-1.5">
+                            <i data-lucide="siren" class="w-3.5 h-3.5"></i> Critical Evac
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">&gt; 7.0m</span>
+                    </div>
+                    <p class="text-slate-400 leading-relaxed text-[11px]">Severe breach risk. Immediate mandatory relocation to relief shelters. High alert siren active.</p>
+                    <div class="pt-1 flex items-center justify-between text-[10px]">
+                        <span class="font-mono text-purple-400 font-bold" x-show="sim.risk === 'CRITICAL'">🚨 ACTIVE CRITICAL</span>
+                        <span class="text-purple-400/80 font-semibold" x-show="sim.risk !== 'CRITICAL'">⚡ Click to trigger Critical & Siren</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: EARLY-WARNING NOTIFICATION FEED -->
+        <section id="alerts-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-slate-100 text-base">Early-Warning Notification Feed</h2>
+                        <p class="text-xs text-slate-400">Automated real-time event logs generated by telemetry sensor nodes.</p>
+                    </div>
+                </div>
+
+                <div class="flex space-x-1.5 text-xs font-semibold bg-slate-950 p-1 rounded-xl border border-slate-800">
+                    <button @click="alertFilter = 'all'" :class="alertFilter === 'all' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'" class="px-3 py-1 rounded-lg transition cursor-pointer">All</button>
+                    <button @click="alertFilter = 'critical'" :class="alertFilter === 'critical' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'" class="px-3 py-1 rounded-lg transition cursor-pointer">Critical</button>
+                    <button @click="alertFilter = 'advisory'" :class="alertFilter === 'advisory' ? 'bg-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'" class="px-3 py-1 rounded-lg transition cursor-pointer">Advisories</button>
+                </div>
+            </div>
+
+            <div class="space-y-2.5 text-xs">
+                <template x-for="alert in filteredAlerts" :key="alert.id">
+                    <div class="p-3.5 rounded-xl border transition-all flex items-start justify-between"
+                         :class="alert.type === 'critical' ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-950/60 border-slate-800'">
+                        <div class="space-y-1">
+                            <div class="flex items-center space-x-2.5">
+                                <span class="font-bold" :class="alert.type === 'critical' ? 'text-red-400' : 'text-slate-200'" x-text="alert.title"></span>
+                                <span class="text-[10px] font-mono px-2 py-0.5 rounded-md" :class="alert.type === 'critical' ? 'bg-red-500/20 text-red-300' : 'bg-slate-800 text-slate-400'" x-text="alert.time"></span>
+                            </div>
+                            <p class="text-slate-400 text-[11px]" x-text="alert.body"></p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </section>
+
+        <!-- SECTION 6: EMERGENCY DIRECTORY, NAVIGATION & DISTRESS SIREN -->
+        <section id="community-section" class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur-sm space-y-6">
+            <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center space-x-3">
+                    <div class="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <i data-lucide="life-buoy" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-slate-100 text-base">Emergency Response & Navigation</h2>
+                        <p class="text-xs text-slate-400">Direct-dial helplines, Web Audio emergency siren test, GPS sharing, and Google Maps shelter routing.</p>
+                    </div>
+                </div>
+
+                <!-- Web Audio Emergency Siren Switch -->
+                <button @click="toggleSiren()" 
+                        :class="sirenActive ? 'bg-red-600 text-white animate-pulse border-red-400' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'"
+                        class="px-3.5 py-2 rounded-xl border font-bold text-xs flex items-center gap-2 shadow-lg transition cursor-pointer">
+                    <span x-show="!sirenActive" class="inline-flex"><i data-lucide="volume-2" class="w-4 h-4"></i></span>
+                    <span x-show="sirenActive" class="inline-flex"><i data-lucide="volume-x" class="w-4 h-4"></i></span>
+                    <span x-text="sirenActive ? 'MUTE EMERGENCY SIREN' : 'TEST SIREN ALARM'"></span>
+                </button>
+            </div>
+
+            <!-- GPS LOCATION SHARING BAR -->
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-xs space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-2.5">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="navigation-2" class="w-4 h-4 text-blue-400"></i>
+                        <span class="font-bold text-slate-200">Emergency GPS Location Sharing</span>
+                    </div>
+                    <button @click="fetchLocation()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition flex items-center gap-1.5 text-[11px] cursor-pointer">
+                        <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                        <span>Acquire GPS Location</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div class="md:col-span-6 bg-slate-900 px-3 py-2 rounded-lg border border-slate-800 text-slate-300 font-mono text-[11px] flex items-center justify-between">
+                        <span class="text-slate-500">Status:</span>
+                        <span class="font-semibold" :class="userLocation.fetched ? 'text-emerald-400' : 'text-slate-400'" x-text="userLocation.status"></span>
+                    </div>
+
+                    <div class="md:col-span-6 flex items-center gap-2">
+                        <!-- Direct SMS Emergency Link -->
+                        <a :href="userLocation.fetched ? 'sms:1077?&body=' + encodeURIComponent('EMERGENCY FLOOD DISTRESS: My Location is https://maps.google.com/?q=' + userLocation.lat + ',' + userLocation.lng) : '#'" 
+                           :class="userLocation.fetched ? 'bg-red-600 hover:bg-red-500 text-white cursor-pointer' : 'bg-slate-800 text-slate-500 cursor-not-allowed pointer-events-none opacity-60'"
+                           class="flex-1 py-2 px-3 rounded-lg font-bold text-[11px] text-center transition flex items-center justify-center gap-1.5 select-none">
+                            <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+                            <span>SMS Location</span>
+                        </a>
+
+                        <!-- Direct WhatsApp Distress Link -->
+                        <a :href="userLocation.fetched ? 'https://wa.me/?text=' + encodeURIComponent('EMERGENCY FLOOD DISTRESS: Please dispatch assistance to my live coordinates: https://maps.google.com/?q=' + userLocation.lat + ',' + userLocation.lng) : '#'" 
+                           :target="userLocation.fetched ? '_blank' : '_self'"
+                           :class="userLocation.fetched ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer' : 'bg-slate-800 text-slate-500 cursor-not-allowed pointer-events-none opacity-60'"
+                           class="flex-1 py-2 px-3 rounded-lg font-bold text-[11px] text-center transition flex items-center justify-center gap-1.5 select-none">
+                            <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+                            <span>WhatsApp Distress</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 text-xs">
+                <!-- Clickable Emergency Helplines -->
+                <div class="lg:col-span-5 space-y-3">
+                    <h3 class="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Direct Dispatch Hotlines</h3>
+                    
+                    <a href="tel:1077" class="p-3.5 bg-red-500/10 border border-red-500/30 hover:border-red-500/60 rounded-xl flex items-center justify-between transition group">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-red-500/20 text-red-400 rounded-lg group-hover:bg-red-500 group-hover:text-white transition">
+                                <i data-lucide="phone-call" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-red-400 group-hover:text-red-300 transition">District Emergency Control</p>
+                                <p class="text-slate-400 text-[11px]">Disaster Management Helpline</p>
+                            </div>
+                        </div>
+                        <span class="font-mono font-bold text-red-400 text-base group-hover:scale-105 transition">1077</span>
+                    </a>
+
+                    <a href="tel:01124363260" class="p-3.5 bg-slate-950/80 border border-slate-800 hover:border-blue-500/50 rounded-xl flex items-center justify-between transition group">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-blue-500/10 text-blue-400 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition">
+                                <i data-lucide="shield" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-200 group-hover:text-blue-400 transition">NDRF Force HQ</p>
+                                <p class="text-slate-400 text-[11px]">Heavy Rescue Operations</p>
+                            </div>
+                        </div>
+                        <span class="font-mono font-bold text-slate-300 text-xs">011-24363260</span>
+                    </a>
+
+                    <a href="tel:108" class="p-3.5 bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 rounded-xl flex items-center justify-between transition group">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition">
+                                <i data-lucide="ambulance" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-200 group-hover:text-emerald-400 transition">Medical Dispatch</p>
+                                <p class="text-slate-400 text-[11px]">Ambulance Emergency Service</p>
+                            </div>
+                        </div>
+                        <span class="font-mono font-bold text-emerald-400 text-base group-hover:scale-105 transition">108</span>
+                    </a>
+                </div>
+
+                <!-- Shelter Directory -->
+                <div class="lg:col-span-7 space-y-3">
+                    <h3 class="font-bold text-slate-400 uppercase text-[10px] tracking-wider">Active Relief Shelters</h3>
+                    
+                    <div class="space-y-2.5">
+                        <div class="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <p class="font-bold text-slate-200">North Hill High School Shelter</p>
+                                <p class="text-slate-400 text-[11px] mt-0.5">Elevation: +45m (High Ground) • Route 88 Access</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">OPEN (140/300)</span>
+                                <a href="https://www.google.com/maps/dir/?api=1&destination=26.170,91.750" target="_blank" 
+                                   class="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 rounded-lg transition text-[11px] flex items-center gap-1 font-semibold">
+                                    <i data-lucide="navigation" class="w-3 h-3"></i> Navigate
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <p class="font-bold text-slate-200">Central Indoor Stadium Refuge</p>
+                                <p class="text-slate-400 text-[11px] mt-0.5">Elevation: +38m • Medical Aid Center</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30">NEAR CAP (480/500)</span>
+                                <a href="https://www.google.com/maps/dir/?api=1&destination=26.135,91.725" target="_blank" 
+                                   class="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 rounded-lg transition text-[11px] flex items-center gap-1 font-semibold">
+                                    <i data-lucide="navigation" class="w-3 h-3"></i> Navigate
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <p class="font-bold text-slate-200">West Community Center</p>
+                                <p class="text-slate-400 text-[11px] mt-0.5">Elevation: +42m • Provisions Active</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">OPEN (80/200)</span>
+                                <a href="https://www.google.com/maps/dir/?api=1&destination=26.110,91.690" target="_blank" 
+                                   class="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 rounded-lg transition text-[11px] flex items-center gap-1 font-semibold">
+                                    <i data-lucide="navigation" class="w-3 h-3"></i> Navigate
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER WITH ATTRIBUTION -->
+    <footer class="bg-slate-950 text-slate-500 py-6 border-t border-slate-900 text-xs mt-12">
+        <div class="max-w-7xl mx-auto px-4 text-center space-y-1.5">
+            <p class="font-semibold text-slate-300">Digital Twin for Flood Management, Simulation and Early Warning</p>
+            <p class="text-slate-400 font-mono text-[11px]">Made by team 2B2T</p>
+        </div>
+    </footer>
+
+    <!-- APPLICATION JAVASCRIPT ENGINE -->
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('floodApp', () => ({
+                stations: [
+                    { id: 'IOT-01', name: 'Station Alpha (Main Bridge)', stage: 5.20, status: 'WARNING', lat: 26.145, lng: 91.736, desc: 'Water level exceeds warning threshold due to upstream basin runoff.' },
+                    { id: 'IOT-02', name: 'Station Beta (East Dyke)', stage: 4.10, status: 'NORMAL', lat: 26.160, lng: 91.760, desc: 'Water stage within safe embankments.' },
+                    { id: 'IOT-03', name: 'Station Gamma (Sector 7 Lowland)', stage: 6.15, status: 'DANGER', lat: 26.120, lng: 91.710, desc: 'DANGER: Stage exceeds critical limit. Inundation in low residential pockets.' },
+                    { id: 'IOT-04', name: 'Station Delta (North Reservoir)', stage: 3.80, status: 'NORMAL', lat: 26.180, lng: 91.720, desc: 'Normal stage maintained.' }
+                ],
+                shelters: [
+                    { name: 'North Hill High School Shelter', cap: '140/300', lat: 26.170, lng: 91.750 },
+                    { name: 'Central Indoor Stadium Refuge', cap: '480/500', lat: 26.135, lng: 91.725 },
+                    { name: 'West Community Center', cap: '80/200', lat: 26.110, lng: 91.690 }
+                ],
+                activeStation: {},
+                activeBasemap: 'dark',
+                
+                layers: {
+                    stations: true,
+                    inundation: true,
+                    shelters: true
+                },
+                sim: {
+                    rain: 50,
+                    dam: 800,
+                    barrier: 1.5,
+                    stage: 5.09,
+                    area: 16.4,
+                    population: 2624,
+                    risk: 'WARNING',
+                    explanation: 'Moderate precipitation (50 mm/h) and reservoir flow (800 m³/s) result in stage height of 5.09m. Temporary barrier height of 1.5m shields commercial sector, but lowlands are exposed.'
+                },
+                alertFilter: 'all',
+                alerts: [
+                    { id: 1, type: 'critical', title: 'Critical Overflow Warning - Sector 7', time: '10:42 AM', body: 'Station Gamma registered stage height of 6.15m (Exceeding 6.0m Danger Mark). Immediate localized evacuation recommended.' },
+                    { id: 2, type: 'advisory', title: 'Public Safety Road Closure Notice', time: '09:15 AM', body: 'Route 104 North underpass closed due to 0.6m standing runoff. Divert via East Highway Route 88.' },
+                    { id: 3, type: 'advisory', title: 'Upstream Dam Spillway Adjustment', time: '07:30 AM', body: 'Reservoir spillway gate release increased to 800 m³/s to manage catchment inflow.' }
+                ],
+                userLocation: {
+                    fetched: false,
+                    status: 'Click Acquire GPS to share live coordinates',
+                    lat: null,
+                    lng: null
+                },
+                alarmActive: false,
+                sirenActive: false,
+                userSilencedAlarm: false,
+                audioCtx: null,
+                osc1: null,
+                osc2: null,
+                lfo: null,
+                gainNode: null,
+                map: null,
+                tileLayers: {},
+                leafletLayers: {
+                    stationsGroup: null,
+                    inundationGroup: null,
+                    sheltersGroup: null
+                },
+                chartInstance: null,
+
+                init() {
+                    this.activeStation = this.stations[0];
+                    this.setupAudioAutoplayUnlock();
+                    
+                    this.$nextTick(() => {
+                        this.initMap();
+                        this.initChart();
+                        this.updateSimulation(false); // Initial calculation without auto alarm
+                    });
+                },
+
+                // Pre-unlock AudioContext on user interaction anywhere on the page
+                setupAudioAutoplayUnlock() {
+                    const unlock = () => {
+                        try {
+                            const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                            if (!this.audioCtx && AudioCtxClass) {
+                                this.audioCtx = new AudioCtxClass();
+                            }
+                            if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                                this.audioCtx.resume();
+                            }
+                        } catch(e) {}
+                    };
+                    ['pointerdown', 'touchstart', 'click', 'input', 'keydown'].forEach(evt => {
+                        window.addEventListener(evt, unlock, { passive: true });
+                    });
+                },
+
+                // Manual risk setting method (triggered by risk cards or scenario buttons)
+                manuallySetRisk(level) {
+                    this.userSilencedAlarm = false; // Reset silence override on explicit user risk change
+                    if (level === 'NORMAL') {
+                        this.sim.rain = 20;
+                        this.sim.dam = 400;
+                        this.sim.barrier = 1.5;
+                        this.updateSimulation(true);
+                    } else if (level === 'WARNING') {
+                        this.sim.rain = 55;
+                        this.sim.dam = 850;
+                        this.sim.barrier = 1.5;
+                        this.updateSimulation(true);
+                    } else if (level === 'DANGER') {
+                        this.sim.rain = 105;
+                        this.sim.dam = 1600;
+                        this.sim.barrier = 1.0;
+                        this.updateSimulation(true);
+                        this.startAlarm(); // Guarantee siren rings immediately
+                    } else if (level === 'CRITICAL') {
+                        this.sim.rain = 145;
+                        this.sim.dam = 2400;
+                        this.sim.barrier = 0;
+                        this.updateSimulation(true);
+                        this.startAlarm(); // Guarantee siren rings immediately
+                    }
+                },
+
+                // Called on slider drag
+                onSliderInput() {
+                    // Moving sliders clears user silence flag
+                    this.userSilencedAlarm = false;
+                    this.updateSimulation(true);
+                },
+
+                fetchLocation() {
+                    this.userLocation.status = 'Fetching GPS coordinates...';
+                    if ("geolocation" in navigator) {
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                                this.userLocation.lat = position.coords.latitude.toFixed(5);
+                                this.userLocation.lng = position.coords.longitude.toFixed(5);
+                                this.userLocation.fetched = true;
+                                this.userLocation.status = `Acquired: ${this.userLocation.lat}°, ${this.userLocation.lng}°`;
+                            },
+                            (error) => {
+                                // Fallback coordinates if restricted or blocked
+                                this.userLocation.lat = 26.14500;
+                                this.userLocation.lng = 91.73600;
+                                this.userLocation.fetched = true;
+                                this.userLocation.status = `Fallback Station GPS: ${this.userLocation.lat}°, ${this.userLocation.lng}°`;
+                            },
+                            { timeout: 8000, enableHighAccuracy: true }
+                        );
+                    } else {
+                        this.userLocation.lat = 26.14500;
+                        this.userLocation.lng = 91.73600;
+                        this.userLocation.fetched = true;
+                        this.userLocation.status = `GPS Unsupported (Using Fallback)`;
+                    }
+                },
+
+                toggleAlarm() {
+                    if (this.alarmActive || this.sirenActive) {
+                        this.userSilencedAlarm = true;
+                        this.stopAlarm();
+                    } else {
+                        this.userSilencedAlarm = false;
+                        this.startAlarm();
+                    }
+                },
+
+                toggleSiren() {
+                    this.toggleAlarm();
+                },
+
+                startAlarm() {
+                    if (this.alarmActive) return;
+                    this.alarmActive = true;
+                    this.sirenActive = true;
+
+                    try {
+                        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                        if (!this.audioCtx && AudioCtxClass) {
+                            this.audioCtx = new AudioCtxClass();
+                        }
+                        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume().catch(() => {});
+                        }
+
+                        // Clean up existing nodes
+                        if (this.osc1) { try { this.osc1.stop(); this.osc1.disconnect(); } catch(e){} this.osc1 = null; }
+                        if (this.osc2) { try { this.osc2.stop(); this.osc2.disconnect(); } catch(e){} this.osc2 = null; }
+                        if (this.lfo) { try { this.lfo.stop(); this.lfo.disconnect(); } catch(e){} this.lfo = null; }
+
+                        if (this.audioCtx) {
+                            // Create gain node with smooth attack
+                            this.gainNode = this.audioCtx.createGain();
+                            const now = this.audioCtx.currentTime || 0;
+                            this.gainNode.gain.setValueAtTime(0.001, now);
+                            this.gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.1);
+
+                            // Dual frequency oscillator for dissonant emergency siren
+                            this.osc1 = this.audioCtx.createOscillator();
+                            this.osc2 = this.audioCtx.createOscillator();
+                            this.osc1.type = 'sawtooth';
+                            this.osc2.type = 'triangle';
+
+                            // Modulating LFO for repeating siren wail (0.8Hz cycle)
+                            this.lfo = this.audioCtx.createOscillator();
+                            const lfoGain = this.audioCtx.createGain();
+                            this.lfo.frequency.setValueAtTime(0.8, now); // 0.8 Hz wail rate
+                            lfoGain.gain.setValueAtTime(320, now); // 320Hz frequency deviation
+
+                            this.osc1.frequency.setValueAtTime(750, now);
+                            this.osc2.frequency.setValueAtTime(758, now);
+
+                            this.lfo.connect(lfoGain);
+                            lfoGain.connect(this.osc1.frequency);
+                            lfoGain.connect(this.osc2.frequency);
+
+                            this.osc1.connect(this.gainNode);
+                            this.osc2.connect(this.gainNode);
+                            this.gainNode.connect(this.audioCtx.destination);
+
+                            this.lfo.start(now);
+                            this.osc1.start(now);
+                            this.osc2.start(now);
+                        }
+                    } catch (e) {
+                        console.warn('Web Audio Siren unavailable:', e);
+                    }
+                },
+
+                stopAlarm() {
+                    if (!this.alarmActive && !this.sirenActive) return;
+                    try {
+                        if (this.gainNode && this.audioCtx) {
+                            const now = this.audioCtx.currentTime;
+                            // Smooth fade out to eliminate audio popping
+                            this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+                            this.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+                            setTimeout(() => {
+                                if (this.osc1) { try { this.osc1.stop(); this.osc1.disconnect(); } catch(e){} this.osc1 = null; }
+                                if (this.osc2) { try { this.osc2.stop(); this.osc2.disconnect(); } catch(e){} this.osc2 = null; }
+                                if (this.lfo) { try { this.lfo.stop(); this.lfo.disconnect(); } catch(e){} this.lfo = null; }
+                            }, 160);
+                        } else {
+                            if (this.osc1) { try { this.osc1.stop(); } catch(e){} this.osc1 = null; }
+                            if (this.osc2) { try { this.osc2.stop(); } catch(e){} this.osc2 = null; }
+                            if (this.lfo) { try { this.lfo.stop(); } catch(e){} this.lfo = null; }
+                        }
+                    } catch(e) {
+                        console.warn('Error stopping siren:', e);
+                    }
+                    this.alarmActive = false;
+                    this.sirenActive = false;
+                },
+
+                startSiren() { this.startAlarm(); },
+                stopSiren() { this.stopAlarm(); },
+
+                get activeLayersCount() {
+                    return (this.layers.stations ? 1 : 0) + (this.layers.inundation ? 1 : 0) + (this.layers.shelters ? 1 : 0);
+                },
+
+                initMap() {
+                    if (this.map) return;
+                    
+                    this.tileLayers = {
+                        street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '&copy; OpenStreetMap contributors'
+                        }),
+                        dark: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                            maxZoom: 16,
+                            attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+                        })
+                    };
+
+                    this.activeBasemap = 'dark';
+
+                    this.map = L.map('leafletMap', {
+                        center: [26.145, 91.736],
+                        zoom: 12,
+                        zoomControl: false,
+                        layers: [this.tileLayers.dark]
+                    });
+
+                    L.control.zoom({ position: 'topleft' }).addTo(this.map);
+
+                    this.leafletLayers.stationsGroup = L.layerGroup().addTo(this.map);
+                    this.leafletLayers.inundationGroup = L.layerGroup().addTo(this.map);
+                    this.leafletLayers.sheltersGroup = L.layerGroup().addTo(this.map);
+
+                    this.renderMapLayers();
+                },
+
+                switchBasemap(type) {
+                    if (!this.map || !this.tileLayers[type] || this.activeBasemap === type) return;
+                    this.map.removeLayer(this.tileLayers[this.activeBasemap]);
+                    this.tileLayers[type].addTo(this.map);
+                    this.activeBasemap = type;
+                },
+
+                recenterMap() {
+                    if (this.map) {
+                        this.map.flyTo([26.145, 91.736], 12, { duration: 1.2 });
+                    }
+                },
+
+                renderMapLayers() {
+                    if (!this.map) return;
+                    
+                    this.leafletLayers.stationsGroup.clearLayers();
+                    this.leafletLayers.inundationGroup.clearLayers();
+                    this.leafletLayers.sheltersGroup.clearLayers();
+
+                    if (this.layers.stations) {
+                        this.stations.forEach((st) => {
+                            let pulseClass = st.status === 'DANGER' ? 'marker-pulse-danger bg-red-500' : 
+                                             st.status === 'WARNING' ? 'marker-pulse-warning bg-amber-500' : 
+                                             'marker-pulse-normal bg-emerald-500';
+
+                            let icon = L.divIcon({
+                                className: 'custom-leaflet-marker',
+                                html: `<div class="relative flex items-center justify-center w-7 h-7 pointer-events-auto">
+                                        <div class="w-6 h-6 rounded-full ${pulseClass} border-2 border-slate-900 flex items-center justify-center shadow-lg cursor-pointer">
+                                            <div class="w-2 h-2 rounded-full bg-white"></div>
+                                        </div>
+                                       </div>`,
+                                iconSize: [28, 28],
+                                iconAnchor: [14, 14]
+                            });
+
+                            let marker = L.marker([st.lat, st.lng], { icon: icon });
+                            marker.bindPopup(`
+                                <div class="font-sans">
+                                    <div class="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-wider">${st.id}</div>
+                                    <div class="font-bold text-sm text-slate-100">${st.name}</div>
+                                    <div class="mt-2 text-xs flex justify-between gap-4">
+                                        <span class="text-slate-400">Current Stage:</span>
+                                        <span class="font-mono font-bold text-blue-400">${st.stage} m</span>
+                                    </div>
+                                    <div class="text-xs flex justify-between gap-4 mt-0.5">
+                                        <span class="text-slate-400">Status:</span>
+                                        <span class="font-bold ${st.status === 'DANGER' ? 'text-red-400' : st.status === 'WARNING' ? 'text-amber-400' : 'text-emerald-400'}">${st.status}</span>
+                                    </div>
+                                </div>
+                            `);
+
+                            marker.on('click', () => {
+                                this.activeStation = st;
+                            });
+
+                            this.leafletLayers.stationsGroup.addLayer(marker);
+                        });
+                    }
+
+                    if (this.layers.inundation) {
+                        this.renderInundationOverlay();
+                    }
+
+                    if (this.layers.shelters) {
+                        this.shelters.forEach(sh => {
+                            let shelterIcon = L.divIcon({
+                                className: 'custom-shelter-marker',
+                                html: `<div class="w-6 h-6 rounded-lg bg-purple-600/90 border-2 border-white flex items-center justify-center text-white shadow-lg cursor-pointer">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                                       </div>`,
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            });
+
+                            let marker = L.marker([sh.lat, sh.lng], { icon: shelterIcon });
+                            marker.bindPopup(`
+                                <div class="font-sans">
+                                    <div class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Relief Shelter</div>
+                                    <div class="font-bold text-slate-100">${sh.name}</div>
+                                    <div class="text-xs text-slate-400 mt-1">Occupancy: <strong class="text-emerald-400">${sh.cap}</strong></div>
+                                    <div class="mt-2">
+                                        <a href="https://www.google.com/maps/dir/?api=1&destination=${sh.lat},${sh.lng}" target="_blank" class="text-xs text-blue-400 hover:underline font-bold">Get Google Maps Directions &rarr;</a>
+                                    </div>
+                                </div>
+                            `);
+                            this.leafletLayers.sheltersGroup.addLayer(marker);
+                        });
+                    }
+                },
+
+                renderInundationOverlay() {
+                    if (!this.map) return;
+                    this.leafletLayers.inundationGroup.clearLayers();
+
+                    let radiusPrimary = 1200 + (this.sim.rain * 22);
+                    let radiusOuter = radiusPrimary * 1.35;
+
+                    let outerCircle = L.circle([26.130, 91.715], {
+                        radius: radiusOuter,
+                        color: '#3b82f6',
+                        fillColor: '#2563eb',
+                        fillOpacity: 0.12,
+                        weight: 1,
+                        dashArray: '4, 8'
+                    });
+                    this.leafletLayers.inundationGroup.addLayer(outerCircle);
+
+                    let innerCircle = L.circle([26.130, 91.715], {
+                        radius: radiusPrimary,
+                        color: '#60a5fa',
+                        fillColor: '#3b82f6',
+                        fillOpacity: 0.35,
+                        weight: 2
+                    });
+                    innerCircle.bindPopup(`Simulated Flood Inundation Zone<br><b>Area:</b> ${this.sim.area} km²<br><b>Radius:</b> ${(radiusPrimary/1000).toFixed(2)} km`);
+                    this.leafletLayers.inundationGroup.addLayer(innerCircle);
+                },
+
+                toggleLayers() {
+                    this.renderMapLayers();
+                },
+
+                updateSimulation(allowAudioTrigger = true) {
+                    this.sim.stage = parseFloat((3.5 + (this.sim.rain * 0.025) + (this.sim.dam * 0.0008) - (this.sim.barrier * 0.2)).toFixed(2));
+                    this.sim.area = parseFloat((8.0 + (this.sim.rain * 0.12) + (this.sim.dam * 0.003)).toFixed(1));
+                    this.sim.population = Math.round(this.sim.area * 160);
+
+                    if (this.sim.stage >= 7.0) {
+                        this.sim.risk = 'CRITICAL';
+                        this.sim.explanation = `Extreme hydrological surge (${this.sim.rain} mm/h rainfall, ${this.sim.dam} m³/s release). Stage height reaches ${this.sim.stage}m, breaching secondary levee crests. Immediate mandatory evacuation active.`;
+                        if (allowAudioTrigger && !this.userSilencedAlarm) {
+                            this.startAlarm();
+                        }
+                    } else if (this.sim.stage >= 6.0) {
+                        this.sim.risk = 'DANGER';
+                        this.sim.explanation = `High intensity rainfall (${this.sim.rain} mm/h) and dam release (${this.sim.dam} m³/s) push water stage to ${this.sim.stage}m, breaching danger limits. Emergency evacuation protocols active.`;
+                        if (allowAudioTrigger && !this.userSilencedAlarm) {
+                            this.startAlarm();
+                        }
+                    } else if (this.sim.stage >= 4.5) {
+                        this.sim.risk = 'WARNING';
+                        this.sim.explanation = `Moderate precipitation and reservoir flow result in stage height of ${this.sim.stage}m. Temporary barrier height of ${this.sim.barrier}m shields commercial sector, but lowlands are exposed.`;
+                        if (this.alarmActive) {
+                            this.stopAlarm();
+                        }
+                        this.userSilencedAlarm = false;
+                    } else {
+                        this.sim.risk = 'NORMAL';
+                        this.sim.explanation = `Under current parameters (${this.sim.rain} mm/h rainfall), water stage remains at ${this.sim.stage}m safely within main embankments.`;
+                        if (this.alarmActive) {
+                            this.stopAlarm();
+                        }
+                        this.userSilencedAlarm = false;
+                    }
+
+                    if (this.map && this.layers.inundation) {
+                        this.renderInundationOverlay();
+                    }
+                },
+
+                resetSimulation() {
+                    this.sim.rain = 50;
+                    this.sim.dam = 800;
+                    this.sim.barrier = 1.5;
+                    this.userSilencedAlarm = false;
+                    this.updateSimulation(false);
+                    this.stopAlarm();
+                },
+
+                initChart() {
+                    const ctx = document.getElementById('telemetryChart');
+                    if (!ctx) return;
+
+                    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 250);
+                    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+                    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+                    this.chartInstance = new Chart(ctx.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00+1', '03:00+1'],
+                            datasets: [
+                                {
+                                    label: 'River Water Stage (m)',
+                                    data: [3.2, 3.4, 3.8, 4.2, 4.6, 5.0, 5.2, 5.3, 5.1, 4.9],
+                                    borderColor: '#38bdf8',
+                                    borderWidth: 3,
+                                    backgroundColor: gradient,
+                                    fill: true,
+                                    tension: 0.35,
+                                    pointBackgroundColor: '#38bdf8',
+                                    pointBorderColor: '#090d16',
+                                    pointRadius: 4,
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: 'Warning Threshold (4.5m)',
+                                    data: [4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5],
+                                    borderColor: '#f59e0b',
+                                    borderWidth: 1.5,
+                                    borderDash: [5, 5],
+                                    pointRadius: 0,
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: 'Danger Threshold (6.0m)',
+                                    data: [6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0],
+                                    borderColor: '#ef4444',
+                                    borderWidth: 1.5,
+                                    borderDash: [5, 5],
+                                    pointRadius: 0,
+                                    yAxisID: 'y'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { 
+                                    position: 'top',
+                                    labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false,
+                                    min: 2.0,
+                                    max: 8.0,
+                                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                    ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+                                    title: { display: true, text: 'Water Stage (Meters)', color: '#64748b' }
+                                },
+                                x: {
+                                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                                    ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+                                }
+                            }
+                        }
+                    });
+                },
+
+                get filteredAlerts() {
+                    if (this.alertFilter === 'all') return this.alerts;
+                    return this.alerts.filter(a => a.type === this.alertFilter);
+                }
+            }));
+        });
+
+        // Initialize Lucide Icons
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+</html>
