@@ -1,6 +1,6 @@
 # Digital Twin Flood Management Dashboard
 
-A static, browser-based flood monitoring and simulation dashboard. There is no build step or package installation: the dashboard's JavaScript and CSS libraries are included under `assets/vendor/`.
+A static, browser-based flood monitoring and simulation dashboard. The page markup is in `index.html`, custom styles are in `assets/styles.css`, and dashboard behavior is in `assets/app.js`. Pinned JavaScript and CSS libraries are included under `assets/vendor/`, so there is no build step or package installation.
 
 ## Run locally
 
@@ -14,7 +14,7 @@ Then open <http://localhost:8000>. A local server is recommended because browser
 
 ## Publish with GitHub Pages
 
-Upload the contents of this folder to a GitHub repository, then in **Settings → Pages**, choose the branch and `/ (root)` as the publishing source. The site entry point is `index.html`.
+Push the entire folder contents, including the `assets/` directory, to a GitHub repository. In **Settings → Pages**, choose the branch and `/ (root)` as the publishing source. The site entry point is `index.html`; pushing only that file will leave the UI libraries and styles unavailable.
 
 ## Network and data notes
 
